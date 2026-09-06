@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>주간 세트</title>
+<meta name="description" content="부위별 주간 세트 수를 세는 기록장">
+<meta name="theme-color" content="#121A21">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./favicon.png">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="주간 세트">
+<style>
+  :root{
+    --ink:#121A21; --sub:#1A242D; --line:#28343F;
+    --text:#E7EEF3; --dim:#7C8B99;
+    --push:#F2A65A; --pull:#5FC3AE; --legs:#B08BD4;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0; background:var(--ink); overscroll-behavior:none}
+  body{
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",system-ui,"Roboto",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    padding:max(20px, env(safe-area-inset-top)) 16px calc(40px + env(safe-area-inset-bottom));
+    max-width:460px; margin:0 auto; min-height:100vh;
+  }
+
+  .head{display:flex; align-items:flex-end; justify-content:space-between; gap:12px}
+  .head h1{margin:0; font-size:23px; font-weight:650; letter-spacing:-.02em}
+  #span{margin:3px 0 0; font-size:13.5px; color:var(--dim); letter-spacing:-.01em}
+  .tally{display:flex; align-items:baseline; gap:4px}
+  .tally strong{font-size:38px; font-weight:700; letter-spacing:-.045em; font-variant-numeric:tabular-nums; line-height:1}
+  .tally span{font-size:13px; color:var(--dim)}
+  #status{margin:14px 0 18px; font-size:13.5px; line-height:1.55; color:var(--dim); letter-spacing:-.01em}
+
+  #list{border-top:1px solid var(--line)}
+  .group{border-bottom:1px solid var(--line)}
+  .group + .group{margin-top:10px; border-top:1px solid var(--line)}
+
+  .row{
+    position:relative; display:flex; align-items:center; gap:12px;
+    height:60px; padding:0 14px 0 18px; overflow:hidden;
+    border-bottom:1px solid rgba(40,52,63,.6);
+    user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
+    touch-action:manipulation; cursor:pointer;
+  }
+  .group .row:last-child{border-bottom:none}
+  .row:active{background:rgba(255,255,255,.03)}
+  .stripe{position:absolute; left:0; top:0; bottom:0; width:3px; opacity:.45}
+  .fill{position:absolute; left:0; top:0; bottom:0; width:0; opacity:.13; transition:width .22s cubic-bezier(.4,0,.2,1)}
+  .ticks{position:absolute; inset:0; pointer-events:none}
+  .ticks i{position:absolute; top:38%; bottom:38%; width:1px; background:rgba(231,238,243,.13)}
+  .name{position:relative; flex:1; font-size:15.5px; letter-spacing:-.015em; min-width:0;
+        overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .num{position:relative; font-size:20px; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-.03em}
+  .num em{font-style:normal; font-size:12.5px; font-weight:500; color:var(--dim); margin-left:1px}
+  .row.done .stripe{opacity:1}
+  .row.done .fill{opacity:.2}
+  .row.done .name{font-weight:600}
+
+  .rename{position:relative; flex:1; min-width:0; background:transparent; border:none;
+    border-bottom:1px solid var(--line); color:var(--text); font-size:15.5px; font-family:inherit;
+    padding:4px 0; outline:none}
+  .rename:focus{border-color:var(--pull)}
+  .remove{position:relative; background:transparent; border:1px solid var(--line); color:var(--dim);
+    font-size:12.5px; font-family:inherit; padding:5px 10px; border-radius:6px; cursor:pointer}
+
+  #hint{margin:12px 0 20px; font-size:12.5px; color:var(--dim); text-align:center; letter-spacing:-.01em}
+
+  .tabs{display:flex; gap:8px}
+  .tabs button{flex:1; background:transparent; border:1px solid var(--line); color:var(--dim);
+    font-family:inherit; font-size:13.5px; padding:11px; border-radius:9px; cursor:pointer; letter-spacing:-.01em}
+  .tabs button.on{background:var(--sub); color:var(--text); border-color:#3A4A58}
+
+  .panel{margin-top:10px; background:var(--sub); border:1px solid var(--line); border-radius:11px; padding:6px 14px 14px}
+  .panel:empty{display:none}
+  .empty{color:var(--dim); font-size:13.5px; padding:14px 0; margin:0; line-height:1.55}
+
+  .wk{border-bottom:1px solid var(--line)}
+  .wk:last-child{border-bottom:none}
+  .wk-head{width:100%; display:flex; justify-content:space-between; align-items:center; gap:10px;
+    background:transparent; border:none; color:var(--text); font-family:inherit; font-size:14px;
+    padding:14px 0; cursor:pointer; letter-spacing:-.01em; text-align:left}
+  .wk-total{color:var(--dim); font-variant-numeric:tabular-nums; font-size:13px; white-space:nowrap}
+  .wk-body{list-style:none; margin:0; padding:0 0 12px}
+  .wk-body li{display:flex; justify-content:space-between; padding:6px 0; font-size:13.5px; color:var(--dim)}
+  .wk-body b{font-variant-numeric:tabular-nums; font-size:14px}
+
+  .setting{display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:14px 0; border-bottom:1px solid var(--line); font-size:14px; letter-spacing:-.01em}
+  .stepper{display:flex; align-items:center; gap:14px}
+  .stepper button{width:30px; height:30px; border-radius:8px; background:transparent; border:1px solid var(--line);
+    color:var(--text); font-size:17px; font-family:inherit; cursor:pointer; line-height:1}
+  .stepper b{font-variant-numeric:tabular-nums; font-size:16px; min-width:22px; text-align:center}
+
+  .ghost{background:transparent; border:1px solid var(--line); color:var(--text); font-family:inherit;
+    font-size:13px; padding:8px 13px; border-radius:8px; cursor:pointer; white-space:nowrap}
+  .ghost:disabled{color:#4C5A66; cursor:default}
+
+  .add{padding:14px 0; border-bottom:1px solid var(--line)}
+  .add input, .restore textarea{width:100%; background:transparent; border:1px solid var(--line); border-radius:8px;
+    color:var(--text); font-family:inherit; font-size:14px; padding:10px 12px; outline:none}
+  .add input:focus, .restore textarea:focus{border-color:var(--pull)}
+  .add-row{display:flex; gap:8px; margin-top:9px; align-items:center}
+  .segs{display:flex; gap:6px; flex:1; min-width:0}
+  .seg{flex:1; background:transparent; border:1px solid var(--line); color:var(--dim); font-family:inherit;
+    font-size:12px; padding:8px 4px; border-radius:8px; cursor:pointer; white-space:nowrap}
+  .seg.on{background:#26333E; color:var(--text); border-color:#3A4A58}
+
+  .restore{padding:14px 0; border-bottom:1px solid var(--line)}
+  .restore textarea{height:70px; resize:vertical; font-size:12px; margin-bottom:9px}
+  .danger{width:100%; margin-top:14px; background:transparent; border:1px solid #4A3038; color:#E08A9B;
+    font-family:inherit; font-size:13.5px; padding:11px; border-radius:9px; cursor:pointer}
+  .note{margin:10px 0 0; font-size:12px; color:var(--dim); line-height:1.5}
+  #warn{margin-top:14px; font-size:12.5px; color:#E08A9B; line-height:1.5; display:none}
+  @media (prefers-reduced-motion: reduce){ .fill{transition:none} }
+</style>
+</head>
+<body>
+
+<header class="head">
+  <div>
+    <h1>이번 주</h1>
+    <p id="span"></p>
+  </div>
+  <div class="tally"><strong id="total">0</strong><span>세트</span></div>
+</header>
+<p id="status"></p>
+
+<main id="list"></main>
+<p id="hint">한 번 누르면 1세트 추가, 길게 누르면 1세트 취소</p>
+
+<nav class="tabs">
+  <button id="tab-history">지난 주 기록</button>
+  <button id="tab-settings">설정</button>
+</nav>
+<div class="panel" id="panel"></div>
+<p id="warn">이 브라우저에서 저장이 막혀 있어요. 숫자는 화면에 남지만 앱을 닫으면 사라져요.</p>
+
+<script>
+"use strict";
+
+/* ---------- storage: localStorage, with an in-memory fallback ---------- */
+var KEY = "weekly-sets-v1";
+var store = (function () {
+  try {
+    localStorage.setItem("__probe", "1");
+    localStorage.removeItem("__probe");
+    return {
+      ok: true,
+      get: function () { return localStorage.getItem(KEY); },
+      set: function (v) { localStorage.setItem(KEY, v); }
+    };
+  } catch (e) {
+    var mem = null;
+    return {
+      ok: false,
+      get: function () { return mem; },
+      set: function (v) { mem = v; }
+    };
+  }
+})();
+if (!store.ok) document.getElementById("warn").style.display = "block";
+
+/* ---------- dates ---------- */
+function pad(n) { return String(n).padStart(2, "0"); }
+function ymd(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+function fromYmd(s) { var p = s.split("-").map(Number); return new Date(p[0], p[1] - 1, p[2]); }
+function mondayOf(date) {
+  var x = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  var wd = x.getDay();
+  x.setDate(x.getDate() + (wd === 0 ? -6 : 1 - wd));
+  return x;
+}
+function spanLabel(startStr) {
+  var s = fromYmd(startStr), e = new Date(s);
+  e.setDate(e.getDate() + 6);
+  return (s.getMonth() + 1) + "월 " + s.getDate() + "일 – " + (e.getMonth() + 1) + "월 " + e.getDate() + "일";
+}
+function buzz(ms) { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) {} }
+
+/* ---------- data ---------- */
+var GROUPS = {
+  push: { label: "밀기", color: "var(--push)" },
+  pull: { label: "당기기", color: "var(--pull)" },
+  legs: { label: "하체와 코어", color: "var(--legs)" }
+};
+var DEFAULT_PARTS = [
+  { id: "chest", name: "가슴", group: "push" },
+  { id: "fdelt", name: "전면삼각근", group: "push" },
+  { id: "sdelt", name: "측면삼각근", group: "push" },
+  { id: "tri",   name: "삼두", group: "push" },
+  { id: "lat",   name: "광배", group: "pull" },
+  { id: "trap",  name: "능형근 승모근", group: "pull" },
+  { id: "rdelt", name: "후면삼각근", group: "pull" },
+  { id: "bi",    name: "이두", group: "pull" },
+  { id: "quad",  name: "허벅지 앞", group: "legs" },
+  { id: "calf",  name: "종아리", group: "legs" },
+  { id: "core",  name: "복부 코어", group: "legs" }
+];
+
+var S = null;         // state
+var rowRefs = {};     // id -> {el, fill, num}
+var panelMode = null; // "history" | "settings"
+var editing = false;
+var newGroup = "legs";
+var openWeek = null;
+
+function normalize(data) {
+  var thisWeek = ymd(mondayOf(new Date()));
+  var parts = (data && Array.isArray(data.parts) && data.parts.length) ? data.parts : DEFAULT_PARTS.slice();
+  var counts = (data && data.counts && typeof data.counts === "object") ? Object.assign({}, data.counts) : {};
+  var history = (data && Array.isArray(data.history)) ? data.history : [];
+  var target = (data && typeof data.target === "number" && data.target > 0) ? data.target : 20;
+  var weekStart = (data && typeof data.weekStart === "string") ? data.weekStart : thisWeek;
+
+  if (weekStart !== thisWeek) {
+    var sum = 0;
+    for (var k in counts) sum += counts[k] || 0;
+    if (sum > 0) {
+      history.unshift({
+        weekStart: weekStart, counts: counts, target: target,
+        parts: parts.map(function (p) { return { id: p.id, name: p.name, group: p.group }; })
+      });
+      history = history.slice(0, 26);
+    }
+    counts = {};
+    weekStart = thisWeek;
+  }
+  parts.forEach(function (p) { if (typeof counts[p.id] !== "number") counts[p.id] = 0; });
+  return { parts: parts, counts: counts, history: history, target: target, weekStart: weekStart };
+}
+
+var saveTimer = null;
+function save() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(function () {
+    try { store.set(JSON.stringify(S)); }
+    catch (e) { document.getElementById("warn").style.display = "block"; }
+  }, 350);
+}
+
+function load() {
+  var raw = null, data = null;
+  try { raw = store.get(); } catch (e) {}
+  if (raw) { try { data = JSON.parse(raw); } catch (e) { data = null; } }
+  S = normalize(data);
+  save();
+}
+
+/* ---------- rendering ---------- */
+function buildList() {
+  var list = document.getElementById("list");
+  list.textContent = "";
+  rowRefs = {};
+
+  ["push", "pull", "legs"].forEach(function (g) {
+    var items = S.parts.filter(function (p) { return p.group === g; });
+    if (!items.length) return;
+    var sec = document.createElement("section");
+    sec.className = "group";
+    items.forEach(function (p) { sec.appendChild(buildRow(p)); });
+    list.appendChild(sec);
+  });
+  paint();
+}
+
+function buildRow(part) {
+  var color = (GROUPS[part.group] || GROUPS.push).color;
+  var row = document.createElement("div");
+  row.className = "row";
+
+  var stripe = document.createElement("span");
+  stripe.className = "stripe";
+  stripe.style.background = color;
+
+  var fill = document.createElement("span");
+  fill.className = "fill";
+  fill.style.background = color;
+
+  var ticks = document.createElement("span");
+  ticks.className = "ticks";
+  ["25%", "50%", "75%"].forEach(function (L) {
+    var i = document.createElement("i");
+    i.style.left = L;
+    ticks.appendChild(i);
+  });
+
+  row.appendChild(stripe);
+  row.appendChild(fill);
+  row.appendChild(ticks);
+
+  if (editing) {
+    var input = document.createElement("input");
+    input.className = "rename";
+    input.value = part.name;
+    input.setAttribute("aria-label", "부위 이름");
+    input.addEventListener("input", function () {
+      part.name = input.value;
+      save();
+    });
+    var del = document.createElement("button");
+    del.className = "remove";
+    del.textContent = "삭제";
+    del.addEventListener("click", function (e) {
+      e.stopPropagation();
+      S.parts = S.parts.filter(function (x) { return x.id !== part.id; });
+      delete S.counts[part.id];
+      save();
+      buildList();
+    });
+    row.appendChild(input);
+    row.appendChild(del);
+  } else {
+    var name = document.createElement("span");
+    name.className = "name";
+    name.textContent = part.name;
+
+    var num = document.createElement("span");
+    num.className = "num";
+
+    row.appendChild(name);
+    row.appendChild(num);
+    attachTap(row, part.id);
+    rowRefs[part.id] = { el: row, fill: fill, num: num, color: color };
+  }
+  return row;
+}
+
+function attachTap(row, id) {
+  var timer = null, longFired = false;
+  row.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+  row.addEventListener("pointerdown", function () {
+    longFired = false;
+    timer = setTimeout(function () { longFired = true; bump(id, -1); buzz(22); }, 420);
+  });
+  ["pointerup", "pointerleave", "pointercancel"].forEach(function (ev) {
+    row.addEventListener(ev, function () { clearTimeout(timer); });
+  });
+  row.addEventListener("click", function () {
+    if (longFired) { longFired = false; return; }
+    bump(id, 1);
+    buzz(8);
+  });
+}
+
+function bump(id, delta) {
+  S.counts[id] = Math.max(0, (S.counts[id] || 0) + delta);
+  paint();
+  save();
+}
+
+function paint() {
+  var total = 0, done = 0;
+  S.parts.forEach(function (p) {
+    var n = S.counts[p.id] || 0;
+    total += n;
+    if (n >= S.target) done++;
+    var r = rowRefs[p.id];
+    if (!r) return;
+    r.fill.style.width = Math.min(100, (n / S.target) * 100) + "%";
+    r.num.innerHTML = "";
+    r.num.appendChild(document.createTextNode(String(n)));
+    var em = document.createElement("em");
+    em.textContent = "/" + S.target;
+    r.num.appendChild(em);
+    var isDone = n >= S.target;
+    r.el.classList.toggle("done", isDone);
+    r.num.style.color = isDone ? r.color : "";
+  });
+
+  document.getElementById("total").textContent = total;
+  document.getElementById("span").textContent = spanLabel(S.weekStart);
+
+  var end = fromYmd(S.weekStart);
+  end.setDate(end.getDate() + 6);
+  var now = new Date();
+  var left = Math.round((end - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
+  document.getElementById("status").textContent =
+    done + "개 부위가 " + S.target + "세트를 채웠어요. " +
+    (left <= 0 ? "오늘이 이번 주 마지막 날이에요." : "일요일까지 " + left + "일 남았어요.");
+}
+
+/* ---------- panels ---------- */
+function el(tag, cls, text) {
+  var e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+function renderPanel() {
+  var p = document.getElementById("panel");
+  p.textContent = "";
+  document.getElementById("tab-history").classList.toggle("on", panelMode === "history");
+  document.getElementById("tab-settings").classList.toggle("on", panelMode === "settings");
+  if (!panelMode) return;
+  if (panelMode === "history") renderHistory(p); else renderSettings(p);
+}
+
+function renderHistory(p) {
+  if (!S.history.length) {
+    p.appendChild(el("p", "empty", "월요일이 지나면 이번 주 기록이 여기에 쌓여요."));
+    return;
+  }
+  S.history.forEach(function (w) {
+    var t = 0;
+    for (var k in w.counts) t += w.counts[k] || 0;
+    var box = el("div", "wk");
+    var head = el("button", "wk-head");
+    head.appendChild(el("span", null, spanLabel(w.weekStart)));
+    head.appendChild(el("span", "wk-total", t + "세트"));
+    head.addEventListener("click", function () {
+      openWeek = (openWeek === w.weekStart) ? null : w.weekStart;
+      renderPanel();
+    });
+    box.appendChild(head);
+    if (openWeek === w.weekStart) {
+      var ul = el("ul", "wk-body");
+      (w.parts || []).forEach(function (part) {
+        var li = el("li");
+        li.appendChild(el("span", null, part.name));
+        var b = el("b", null, String(w.counts[part.id] || 0));
+        b.style.color = (GROUPS[part.group] || GROUPS.push).color;
+        li.appendChild(b);
+        ul.appendChild(li);
+      });
+      box.appendChild(ul);
+    }
+    p.appendChild(box);
+  });
+}
+
+function renderSettings(p) {
+  // target
+  var s1 = el("div", "setting");
+  s1.appendChild(el("span", null, "부위별 주간 목표"));
+  var step = el("div", "stepper");
+  var minus = el("button", null, "−");
+  var val = el("b", null, String(S.target));
+  var plus = el("button", null, "+");
+  minus.addEventListener("click", function () { S.target = Math.max(1, S.target - 1); val.textContent = S.target; paint(); save(); });
+  plus.addEventListener("click", function () { S.target = S.target + 1; val.textContent = S.target; paint(); save(); });
+  step.appendChild(minus); step.appendChild(val); step.appendChild(plus);
+  s1.appendChild(step);
+  p.appendChild(s1);
+
+  // edit mode
+  var s2 = el("div", "setting");
+  s2.appendChild(el("span", null, "부위 이름 바꾸기와 삭제"));
+  var eb = el("button", "ghost", editing ? "편집 끝내기" : "편집하기");
+  eb.addEventListener("click", function () { editing = !editing; buildList(); renderPanel(); });
+  s2.appendChild(eb);
+  p.appendChild(s2);
+
+  // add part
+  var add = el("div", "add");
+  var input = document.createElement("input");
+  input.placeholder = "부위 추가 (예: 허벅지 뒤)";
+  add.appendChild(input);
+  var arow = el("div", "add-row");
+  var segs = el("div", "segs");
+  Object.keys(GROUPS).forEach(function (k) {
+    var b = el("button", "seg" + (newGroup === k ? " on" : ""), GROUPS[k].label);
+    b.addEventListener("click", function () {
+      newGroup = k;
+      Array.prototype.forEach.call(segs.children, function (c, i) {
+        c.classList.toggle("on", Object.keys(GROUPS)[i] === k);
+      });
+    });
+    segs.appendChild(b);
+  });
+  var addBtn = el("button", "ghost", "추가");
+  addBtn.addEventListener("click", function () {
+    var v = input.value.trim();
+    if (!v) return;
+    var id = "p" + Date.now();
+    S.parts.push({ id: id, name: v, group: newGroup });
+    S.counts[id] = 0;
+    input.value = "";
+    save();
+    buildList();
+  });
+  arow.appendChild(segs); arow.appendChild(addBtn);
+  add.appendChild(arow);
+  p.appendChild(add);
+
+  // backup
+  var bk = el("div", "restore");
+  var ta = document.createElement("textarea");
+  ta.placeholder = "백업 코드를 여기에 붙여넣고 복원을 누르세요";
+  bk.appendChild(ta);
+  var brow = el("div", "add-row");
+  var copyBtn = el("button", "ghost", "백업 코드 만들기");
+  copyBtn.addEventListener("click", function () {
+    ta.value = JSON.stringify(S);
+    ta.select();
+    try { navigator.clipboard.writeText(ta.value); copyBtn.textContent = "복사했어요"; }
+    catch (e) { copyBtn.textContent = "길게 눌러 복사하세요"; }
+    setTimeout(function () { copyBtn.textContent = "백업 코드 만들기"; }, 2000);
+  });
+  var restoreBtn = el("button", "ghost", "복원");
+  restoreBtn.addEventListener("click", function () {
+    try {
+      var d = JSON.parse(ta.value);
+      S = normalize(d);
+      save(); buildList(); renderPanel();
+    } catch (e) {
+      restoreBtn.textContent = "코드가 올바르지 않아요";
+      setTimeout(function () { restoreBtn.textContent = "복원"; }, 2000);
+    }
+  });
+  brow.appendChild(copyBtn); brow.appendChild(restoreBtn);
+  bk.appendChild(brow);
+  bk.appendChild(el("p", "note", "기록은 이 브라우저 안에만 있어요. 인터넷 사용 기록을 지우면 함께 사라지니, 가끔 백업 코드를 메모장에 옮겨두면 안전해요."));
+  p.appendChild(bk);
+
+  // reset
+  var reset = el("button", "danger", "이번 주 세트 모두 0으로");
+  var armed = false;
+  reset.addEventListener("click", function () {
+    if (!armed) { armed = true; reset.textContent = "한 번 더 누르면 지워져요"; setTimeout(function () { armed = false; reset.textContent = "이번 주 세트 모두 0으로"; }, 3000); return; }
+    S.parts.forEach(function (x) { S.counts[x.id] = 0; });
+    armed = false; reset.textContent = "이번 주 세트 모두 0으로";
+    paint(); save();
+  });
+  p.appendChild(reset);
+}
+
+/* ---------- week rollover watcher ---------- */
+function checkWeek() {
+  var thisWeek = ymd(mondayOf(new Date()));
+  if (S.weekStart !== thisWeek) {
+    S = normalize(S);
+    save(); buildList(); renderPanel();
+  }
+}
+
+/* ---------- boot ---------- */
+document.getElementById("tab-history").addEventListener("click", function () {
+  panelMode = (panelMode === "history") ? null : "history";
+  renderPanel();
+});
+document.getElementById("tab-settings").addEventListener("click", function () {
+  panelMode = (panelMode === "settings") ? null : "settings";
+  if (panelMode !== "settings" && editing) { editing = false; buildList(); }
+  renderPanel();
+});
+document.addEventListener("visibilitychange", function () { if (!document.hidden) checkWeek(); });
+setInterval(checkWeek, 60000);
+
+load();
+buildList();
+renderPanel();
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("./sw.js").catch(function () {});
+  });
+}
+</script>
+</body>
+</html>
